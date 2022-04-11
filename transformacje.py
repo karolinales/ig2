@@ -14,17 +14,9 @@ class Transformacje:
         self.flattening = (self.a - self.b) / self.a
         self.ecc2 = (self.a**2 - self.b**2)/self.a**2
      
-    def deg2dms(self, dd):
-        deg = int(np.trunc(dd))
-        mnt = int(np.trunc((dd-deg) * 60))
-        sec = ((dd-deg) * 60 - mnt) * 60
-        dms = [deg, abs(mnt), abs(sec)]
-        print(str(deg)+chr(176)+"%0.2d" % abs(mnt)+'\''+"%08.5f" % abs(sec)+'\"')
-        return dms   
-     
     def xyz2plh(self, X,Y,Z):
         """Funkcja służąca do przeliczenia współrzędnych geocentrycznych XYZ na 
-        współrzędne geocentryczne krzywoliniwe (Fi, La, h)
+        współrzędne geocentryczne krzywoliniwe (Fi, La, h) przy użyciu algorytmu Hirvonena.
         INPUT: 
             X [float] - współrzędna X danego punktu [m]
             Y [float] - współrzędna Y danego punktu [m]
@@ -56,6 +48,15 @@ class Transformacje:
         return phi, lam, hel
     
     def sigma(self, phi):
+        """Funkcja ta służy do obliczenia długości łuku południka, konieczna do
+        przejścia ze współrzędnych krzywoliniowych na płaszczyznę
+        odwzorowania Gaussa-Krügera
+        INPUT: 
+            phi [float] – szerokość geodezyjna danego punktu [rad]
+            a [float]– długość dłuższej pół osi elipsoidy [m]
+            e2 [float] – pierwszy mimośród elipsoidy 
+        OUt:
+            sigma [float] – długość łuku południka [m]"""
         A0 = 1 - (self.ecc2/4)-(3*self.ecc2**2/64)-(5*self.ecc2**3/256)
         A2=(3/8)*(self.ecc2 + (self.ecc2**2/4)+((15*self.ecc2**3)/128))
         A4=15/256*(self.ecc2**2+(3*self.ecc2**3/4))
@@ -65,6 +66,16 @@ class Transformacje:
         
     
     def plh2gk(self, phi, lam, lam0 = 21):
+        """Przeliczenie współrzędnych krzywoliniowych na wpółrzędne GK
+        INPUT:
+            phi [float] - szerokosc geodezyjna punktu przeliczanego[rad]\
+            lam [float] - długosc geodezyjna punktu przeliczane [rad]
+            lam0 [float] - południk odniesienia, wybierany stosowanie do odwzorowania, na które chcemy przejsc później [rad]
+            a [float] - dłuższa półos elipsoidy [m]
+            e2 [float] - pierwszy mimosród elipsoidy
+        OUT:
+            XGK [float] - współrzędna X punktu na płaszczyźnie GK [m]
+            YGK [float] - współrzędna Y punktu na płaszczyźnie GK [m]"""
         lam0 = lam0 * np.pi/180
         b2 = self.b ** 2
         ep2 = ((self.a ** 2 ) - b2) / b2
@@ -79,16 +90,41 @@ class Transformacje:
         return(XGK, YGK)
     
     def gk2pl2(self, xgk, ygk, strefa = 7):
+        """ Przeliczenie współrzędnych GK do układu PL-2000
+        INPUT:
+            XGK [float] - współrzędna X punktu na płaszczyźnie GK [m]
+            YGK [float] - współrzędna Y punktu na płaszczyźnie GK [m]
+            strefa [int] - strefa w której znajduję sie punkt w układzie PL-2000 [bez jednostek]
+        OUT: 
+            x2 [float] - współrzędna X puntku w układzie współrzędnych płaskich PL-2000 [m]
+            y2 [float] - współrzędna Y puntku w układzie współrzędnych płaskich PL-2000 [m]"""
         x2 = xgk * 0.999923
         y2 = ygk * 0.999923 + strefa * 1000000 + 500000
         return x2, y2
     
     def gk2pl92(self, xgk,ygk):
+        """ Przeliczenie współrzędnych GK do układu PL-1992
+        INPUT:
+            XGK [float] - współrzędna X punktu na płaszczyźnie GK [m]
+            YGK [float] - współrzędna Y punktu na płaszczyźnie GK [m]
+        OUT: 
+            x92 [float] - współrzędna X puntku w układzie współrzędnych płaskich PL-1992 [m]
+            y92 [float] - współrzędna Y puntku w układzie współrzędnych płaskich PL-1992 [m]"""
         x92 = xgk * 0.9993 - 5300000
         y92 = ygk * 0.9993 + 500000
         return x92, y92
     
     def plh2xyz(self, phi, lam, hel):
+        """Funkcja odwrotna do funckcji xyz2plh. Pozwala ona na przeliczenie współrzędnych geocentyrcznych
+        krzywoliniowych na wspoółrzędne geocentryczne prostokątne
+        INPUT:
+            phi [float] - szerokosc geodezyjna punku [rad]
+            lam [float] - długosc geodezyjna punktu [rad]
+            hel [float] - wysokosc elipsoidalana punktu
+        OUT:
+            x [float] - wspołrzędna X punktu [m]
+            y [float] - współrzedna Y punktu [m]
+            z [float] - wspoółrzędna Z puntku [m]"""
         N = self.a/np.sqrt(1 - (self.ecc2 * np.sin(phi)**2))
         y = (N + hel) * np.cos(phi) * np.sin(lam)
         x = (N + hel) * np.cos(phi) * np.cos(lam)
@@ -96,6 +132,15 @@ class Transformacje:
         return x,y,z
 
     def neu(self,x,y,z):
+        """Funkcja służy do obliczenia współrzednych topocentrycznych, przyumujących jako początek ukłądu współrzędnych, punkt 
+        o współrzędnych srednich. Funkcja ta oblicza odpowiadnią macierz obrotu układu, a także oblicza współrzędne punktów.
+        INPUT: 
+            x [array] - tablica zawierająca współrzędne X punktów [m]
+            y [array] - tablica zawierająca współrzędne Y punktów [m]
+            z [array] - tablica zawierająca współrzędne Z punktów [m]
+        OUT:
+            delta_neu [array] - tablica o trzech kolumnach oraz zmiennej liczbie wierszy zależnej od ilosci punktów, które 
+                                przliczamy. W pierszej kolumnie znajdują się wartosci N, w drugiej E, w trzeciej Z [m]"""
         x_sr = np.average(x)
         y_sr = np.average(y)
         z_sr = np.average(z)
@@ -117,10 +162,28 @@ class Transformacje:
         return delta_neu
     
     def odl2D(self, x1, y1, x2, y2):
+        """Funkcja służy do obliczenia odlełosci 2D między dwoma punktami.
+        INPUT:
+            x1 [float] - współrzędna X punktu pierwszego [m]
+            y1 [float] - współrzedna Y punktu pierwszego [m]
+            x2 [float] - współrzędna X punktu drugiego [m]
+            y2 [float] - współrzedna Y punktu drugiego [m]            
+        OUT:
+            odl [float] - odlełosc 2D między punktami [m]"""
         odl = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
         return odl
     
     def odl3D(self, x1, y1, z1, x2, y2, z2):
+        """Funkcja służy do obliczenia odlełosci 3D między dwoma punktami.
+        INPUT:
+            x1 [float] - współrzędna X punktu pierwszego [m]
+            y1 [float] - współrzedna Y punktu pierwszego [m]
+            z1 [float] - współrzedna Z punktu pierwszego [m]
+            x2 [float] - współrzędna X punktu drugiego [m]
+            y2 [float] - współrzedna Y punktu drugiego [m]    
+            z2 [float] - współrzedna Z punktu drugiego [m]
+        OUT:
+            odl [float] - odlełosc 3D między punktami [m]"""
         odl = np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
         return odl
     
